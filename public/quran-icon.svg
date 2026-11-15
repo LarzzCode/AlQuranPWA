@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#059669" />
+      <stop offset="100%" stop-color="#064E3B" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FDE68A" />
+      <stop offset="50%" stop-color="#F59E0B" />
+      <stop offset="100%" stop-color="#D97706" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-opacity="0.25" flood-color="#000000" />
+    </filter>
+  </defs>
+
+  <!-- iOS Squircle Background -->
+  <rect width="512" height="512" rx="114" fill="url(#bgGrad)" />
+
+  <!-- Subtle Islamic Geometric Pattern Overlay -->
+  <circle cx="256" cy="256" r="180" fill="none" stroke="#34D399" stroke-width="2" opacity="0.2" />
+  <circle cx="256" cy="256" r="140" fill="none" stroke="#FDE68A" stroke-width="1.5" stroke-dasharray="6,6" opacity="0.25" />
+
+  <!-- Quran Book Stand & Holy Quran Graphic -->
+  <g filter="url(#shadow)" transform="translate(0, 10)">
+    <!-- Quran Rehal (Stand) Base -->
+    <path d="M160 360 L256 310 L352 360 L330 380 L256 340 L182 380 Z" fill="url(#goldGrad)" opacity="0.9" />
+
+    <!-- Open Quran Left Page -->
+    <path d="M256 300 C220 280 160 260 120 230 C120 180 120 150 120 150 C170 175 220 195 256 220 Z" fill="#F8FAFC" />
+    <!-- Left page inner border -->
+    <path d="M250 285 C218 268 170 250 135 225 C135 170 135 162 135 162 C178 184 218 202 250 222 Z" fill="none" stroke="url(#goldGrad)" stroke-width="2.5" />
+    <!-- Left page text lines -->
+    <line x1="150" y1="200" x2="235" y2="238" stroke="#059669" stroke-width="3" stroke-linecap="round" opacity="0.6" />
+    <line x1="150" y1="220" x2="235" y2="258" stroke="#059669" stroke-width="3" stroke-linecap="round" opacity="0.6" />
+    <line x1="155" y1="240" x2="230" y2="274" stroke="#059669" stroke-width="3" stroke-linecap="round" opacity="0.6" />
+
+    <!-- Open Quran Right Page -->
+    <path d="M256 300 C292 280 352 260 392 230 C392 180 392 150 392 150 C342 175 292 195 256 220 Z" fill="#FFFFFF" />
+    <!-- Right page inner border -->
+    <path d="M262 285 C294 268 342 250 377 225 C377 170 377 162 377 162 C334 184 294 202 262 222 Z" fill="none" stroke="url(#goldGrad)" stroke-width="2.5" />
+    <!-- Right page text lines -->
+    <line x1="277" y1="238" x2="362" y2="200" stroke="#059669" stroke-width="3" stroke-linecap="round" opacity="0.6" />
+    <line x1="277" y1="258" x2="362" y2="220" stroke="#059669" stroke-width="3" stroke-linecap="round" opacity="0.6" />
+    <line x1="282" y1="274" x2="357" y2="240" stroke="#059669" stroke-width="3" stroke-linecap="round" opacity="0.6" />
+
+    <!-- Center Spine & Ribbon Bookmark -->
+    <path d="M256 215 L256 325" stroke="url(#goldGrad)" stroke-width="6" stroke-linecap="round" />
+    <path d="M256 300 L256 350 L248 342 L240 350 L240 300 Z" fill="#EF4444" opacity="0.9" />
+
+    <!-- Crescent & Star on Top -->
+    <g transform="translate(256, 120) scale(0.7)">
+      <path d="M-10,-20 A 18 18 0 1 0 18 12 A 14 14 0 1 1 -10 -20 Z" fill="url(#goldGrad)" />
+      <polygon points="12,-8 15,-16 23,-16 17,-21 19,-29 12,-24 5,-29 7,-21 1,-16 9,-16" fill="url(#goldGrad)" transform="translate(4, 5) scale(0.6)" />
+    </g>
+  </g>
+</svg>
