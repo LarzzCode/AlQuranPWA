@@ -26,6 +26,10 @@ interface SurahReaderProps {
   currentBookmark: Bookmark | null;
   targetAyatStart?: number;
   targetAyatEnd?: number;
+  showFontModalExternal?: boolean;
+  setShowFontModalExternal?: (show: boolean) => void;
+  showJumpModalExternal?: boolean;
+  setShowJumpModalExternal?: (show: boolean) => void;
 }
 
 export const SurahReader: React.FC<SurahReaderProps> = ({
@@ -35,6 +39,10 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
   currentBookmark,
   targetAyatStart,
   targetAyatEnd,
+  showFontModalExternal,
+  setShowFontModalExternal,
+  showJumpModalExternal,
+  setShowJumpModalExternal,
 }) => {
   const {
     theme,
@@ -45,27 +53,46 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
   } = useTheme();
   const themeClasses = getThemeClasses(theme);
 
+  const topSentinelRef = useRef<HTMLDivElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   const [copiedAyat, setCopiedAyat] = useState<number | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [playingAyat, setPlayingAyat] = useState<number | null>(null);
   const [isPlayingFull, setIsPlayingFull] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
-  const [showJumpModal, setShowJumpModal] = useState(false);
-  const [showFontModal, setShowFontModal] = useState(false);
+
+  // Modals state (controlled internally or externally via Header)
+  const [internalJumpModal, setInternalJumpModal] = useState(false);
+  const [internalFontModal, setInternalFontModal] = useState(false);
+
+  const isJumpModalOpen = showJumpModalExternal !== undefined ? showJumpModalExternal : internalJumpModal;
+  const setIsJumpModalOpen = (open: boolean) => {
+    if (setShowJumpModalExternal) setShowJumpModalExternal(open);
+    else setInternalJumpModal(open);
+  };
+
+  const isFontModalOpen = showFontModalExternal !== undefined ? showFontModalExternal : internalFontModal;
+  const setIsFontModalOpen = (open: boolean) => {
+    if (setShowFontModalExternal) setShowFontModalExternal(open);
+    else setInternalFontModal(open);
+  };
 
   // Pagination states
   const [pageSize, setPageSize] = useState<number>(10);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [jumpAyatInput, setJumpAyatInput] = useState<string>('');
 
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Floating bar visibility on scroll: auto-hide when scrolling down to give 100% full immersion
+  const [isFloatingBarVisible, setIsFloatingBarVisible] = useState(true);
+  const lastScrollY = useRef(0);
 
-  // Filter ayahs if target range is set (e.g. Baqarah 284-286)
+  // Target range state (e.g. Baqarah 284-286)
   const [activeRange, setActiveRange] = useState<{ start?: number; end?: number } | null>(
     targetAyatStart ? { start: targetAyatStart, end: targetAyatEnd } : null
   );
 
-  // Determine base ayahs to display (either activeRange or full surah)
+  // Determine base ayahs to display
   const baseAyat = useMemo(() => {
     if (activeRange?.start) {
       return surah.ayat.filter(
@@ -75,7 +102,7 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
     return surah.ayat;
   }, [surah.ayat, activeRange]);
 
-  // Compute pagination parameters
+  // Compute total pages
   const totalPages = useMemo(() => {
     if (pageSize >= baseAyat.length) return 1;
     return Math.ceil(baseAyat.length / pageSize);
@@ -88,7 +115,38 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
     return baseAyat.slice(startIdx, startIdx + pageSize);
   }, [baseAyat, currentPage, pageSize]);
 
-  // If targetAyatStart is passed, calculate appropriate initial page
+  // Handle page change: ALWAYS reset scroll to the very top cleanly on iPhone & all devices
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages) return;
+    setCurrentPage(newPage);
+  };
+
+  // Dedicated effect to force scroll to top whenever currentPage changes
+  useEffect(() => {
+    // 1. Immediate window and document scroll
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+
+    // 2. Sentinel element scroll
+    if (topSentinelRef.current) {
+      topSentinelRef.current.scrollIntoView({ behavior: 'instant' as ScrollBehavior, block: 'start' });
+    }
+
+    // 3. Fallback in next animation frame to guarantee DOM has painted the new page
+    const rafId = requestAnimationFrame(() => {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      if (topSentinelRef.current) {
+        topSentinelRef.current.scrollIntoView({ behavior: 'instant' as ScrollBehavior, block: 'start' });
+      }
+    });
+
+    return () => cancelAnimationFrame(rafId);
+  }, [currentPage]);
+
+  // Target ayat start computation on initial mount
   useEffect(() => {
     if (targetAyatStart && !activeRange) {
       const pageIndex = Math.ceil(targetAyatStart / pageSize);
@@ -102,12 +160,23 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
     setActiveRange(targetAyatStart ? { start: targetAyatStart, end: targetAyatEnd } : null);
   }, [surah.nomor, targetAyatStart, targetAyatEnd]);
 
-  // Scroll listener for back to top button
+  // Intelligent Scroll Listener: Auto-hide floating nav on scroll down, show on scroll up
   useEffect(() => {
     const handleScroll = () => {
-      setShowScrollTop(window.scrollY > 350);
+      const currentY = window.scrollY;
+      setShowScrollTop(currentY > 350);
+
+      // If scrolled down more than 15px, hide floating nav for distraction-free reading
+      if (currentY > lastScrollY.current + 12 && currentY > 150) {
+        setIsFloatingBarVisible(false);
+      } else if (currentY < lastScrollY.current - 8 || currentY <= 150) {
+        // Scrolled up or near top: show floating nav
+        setIsFloatingBarVisible(true);
+      }
+      lastScrollY.current = currentY;
     };
-    window.addEventListener('scroll', handleScroll);
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
@@ -121,14 +190,7 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
     };
   }, [surah.nomor]);
 
-  // Handle page change
-  const handlePageChange = (newPage: number) => {
-    if (newPage < 1 || newPage > totalPages) return;
-    setCurrentPage(newPage);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  // Jump to specific ayah
+  // Jump to specific ayah handler
   const handleJumpToAyat = (e: React.FormEvent) => {
     e.preventDefault();
     const ayatNum = parseInt(jumpAyatInput, 10);
@@ -138,12 +200,12 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
     }
 
     if (activeRange) {
-      setActiveRange(null); // Reset range filter to full surah
+      setActiveRange(null);
     }
 
     const targetPage = Math.ceil(ayatNum / pageSize);
     setCurrentPage(targetPage);
-    setShowJumpModal(false);
+    setIsJumpModalOpen(false);
     setJumpAyatInput('');
 
     setTimeout(() => {
@@ -151,7 +213,7 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
       if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
-    }, 200);
+    }, 150);
   };
 
   const handlePlayAyat = (ayat: Ayat) => {
@@ -179,11 +241,9 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
 
     audio.onended = () => {
       setPlayingAyat(null);
-      // Auto-play next verse if available
       const nextAyatNumber = ayat.nomorAyat + 1;
       const nextAyat = surah.ayat.find((a) => a.nomorAyat === nextAyatNumber);
       if (nextAyat) {
-        // If next ayat is on the next page, advance page automatically
         if (nextAyatNumber > currentPage * pageSize && currentPage < totalPages) {
           setCurrentPage((prev) => prev + 1);
         }
@@ -243,8 +303,11 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
   const lastAyatOnPage = paginatedAyat[paginatedAyat.length - 1]?.nomorAyat || 1;
 
   return (
-    <div className="space-y-4 pb-36 animate-fadeIn">
-      {/* Surah Header Card (iOS Cupertino Glass Style) */}
+    <div className="space-y-4 pb-24 animate-fadeIn relative">
+      {/* Top Sentinel for instant scroll to top */}
+      <div ref={topSentinelRef} className="h-0 w-0 -mt-2" />
+
+      {/* Surah Header Card (iOS Cupertino Style) */}
       <div
         className={`p-5 rounded-3xl border transition-all relative overflow-hidden text-center ${
           theme === 'dark'
@@ -305,7 +368,7 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
               }`}
             >
               {isPlayingFull ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-              <span>{isPlayingFull ? 'Jeda Murottal Surat' : 'Putar Murottal Surat Lengkap'}</span>
+              <span>{isPlayingFull ? 'Jeda Murottal Surat' : 'Putar Murottal Penuh'}</span>
             </button>
           </div>
         )}
@@ -363,14 +426,18 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
         )}
       </div>
 
-      {/* Paging Bar (Top Indicator & Controls) */}
+      {/* Clean Top Page Indicator & Page Size Controller */}
       <div
         className={`p-3 rounded-2xl border flex items-center justify-between text-xs transition-all ${themeClasses.cardBg}`}
       >
         <div className="flex items-center space-x-2">
-          <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-            Hal {currentPage} dari {totalPages}
-          </span>
+          <button
+            onClick={() => setIsJumpModalOpen(true)}
+            className="flex items-center space-x-1.5 text-emerald-600 dark:text-emerald-400 font-semibold active:scale-95 transition-transform"
+          >
+            <span>Hal {currentPage} / {totalPages}</span>
+            <SlidersHorizontal className="w-3 h-3 opacity-70" />
+          </button>
           <span className={themeClasses.textSecondary}>•</span>
           <span className={themeClasses.textSecondary}>
             Ayat {firstAyatOnPage} - {lastAyatOnPage}
@@ -380,7 +447,7 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
         {/* Page size selector pills */}
         <div className="flex items-center space-x-1.5">
           <span className={`text-[10px] hidden sm:inline ${themeClasses.textSecondary}`}>
-            Per Halaman:
+            Ayat/Hal:
           </span>
           {[10, 20, 30].map((size) => (
             <button
@@ -553,26 +620,37 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
         })}
       </div>
 
-      {/* In-Page Bottom Navigation Stepper */}
+      {/* NATURAL IN-PAGE BOTTOM PAGINATION STEPPER */}
       {totalPages > 1 && (
-        <div className="pt-2 flex items-center justify-between gap-2">
-          <button
-            onClick={() => handlePageChange(currentPage - 1)}
-            disabled={currentPage === 1}
-            className={`flex-1 py-3 px-4 rounded-2xl border flex items-center justify-center space-x-2 text-xs font-semibold transition-all active:scale-95 disabled:opacity-40 disabled:pointer-events-none ${themeClasses.cardBg}`}
-          >
-            <ChevronLeft className="w-4 h-4 text-emerald-500" />
-            <span>Halaman Sebelumnya</span>
-          </button>
+        <div
+          className={`p-3.5 rounded-2xl border transition-all ${themeClasses.cardBg}`}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <button
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+              className={`flex-1 py-2.5 px-3 rounded-xl border flex items-center justify-center space-x-1.5 text-xs font-semibold transition-all active:scale-95 disabled:opacity-30 disabled:pointer-events-none ${themeClasses.cardElevated}`}
+            >
+              <ChevronLeft className="w-4 h-4 text-emerald-500" />
+              <span>Sebelumnya</span>
+            </button>
 
-          <button
-            onClick={() => handlePageChange(currentPage + 1)}
-            disabled={currentPage === totalPages}
-            className={`flex-1 py-3 px-4 rounded-2xl border flex items-center justify-center space-x-2 text-xs font-semibold transition-all active:scale-95 disabled:opacity-40 disabled:pointer-events-none ${themeClasses.cardBg}`}
-          >
-            <span>Halaman Berikutnya</span>
-            <ChevronRight className="w-4 h-4 text-emerald-500" />
-          </button>
+            <button
+              onClick={() => setIsJumpModalOpen(true)}
+              className="px-3 py-2 rounded-xl text-xs font-bold text-emerald-600 dark:text-emerald-400 active:scale-95 transition-transform"
+            >
+              Halaman {currentPage} dari {totalPages}
+            </button>
+
+            <button
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className={`flex-1 py-2.5 px-3 rounded-xl border flex items-center justify-center space-x-1.5 text-xs font-semibold transition-all active:scale-95 disabled:opacity-30 disabled:pointer-events-none ${themeClasses.cardElevated}`}
+            >
+              <span>Selanjutnya</span>
+              <ChevronRight className="w-4 h-4 text-emerald-500" />
+            </button>
+          </div>
         </div>
       )}
 
@@ -615,81 +693,71 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
         )}
       </div>
 
-      {/* MODERN iOS FLOATING ISLAND BAR (Reading Controller Dock) */}
-      <div className="fixed bottom-4 left-0 right-0 z-40 px-3 pointer-events-none">
+      {/* DISCRETE MINIMAL FLOATING CONTROLLER (AUTO-HIDES ON SCROLL DOWN FOR MAXIMUM IMMERSION) */}
+      {totalPages > 1 && (
         <div
-          className={`max-w-md mx-auto pointer-events-auto rounded-full p-2 border shadow-2xl shadow-black/20 dark:shadow-black/60 transition-all flex items-center justify-between ${
-            theme === 'dark'
-              ? 'bg-[#18181A]/90 backdrop-blur-2xl border-[#2C2C2E]'
-              : theme === 'sepia'
-              ? 'bg-[#F2E8D2]/95 backdrop-blur-2xl border-[#DECFA9]'
-              : 'bg-white/95 backdrop-blur-2xl border-gray-200/90 shadow-gray-200/60'
+          className={`fixed bottom-4 left-0 right-0 z-30 px-3 pointer-events-none transition-all duration-300 ease-in-out ${
+            isFloatingBarVisible ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0 pointer-events-none'
           }`}
         >
-          {/* Previous Page Pill */}
-          <button
-            onClick={() => handlePageChange(currentPage - 1)}
-            disabled={currentPage === 1}
-            aria-label="Halaman Sebelumnya"
-            className="w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 disabled:opacity-30 disabled:pointer-events-none hover:bg-black/5 dark:hover:bg-white/5"
-          >
-            <ChevronLeft className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-          </button>
-
-          {/* Center Info & Quick Jump Trigger */}
-          <button
-            onClick={() => setShowJumpModal(true)}
-            className={`px-3 py-1.5 rounded-full flex items-center space-x-1.5 transition-all active:scale-95 border ${
+          <div
+            className={`max-w-xs mx-auto pointer-events-auto rounded-full px-2 py-1.5 border shadow-lg shadow-black/15 dark:shadow-black/50 transition-all flex items-center justify-between ${
               theme === 'dark'
-                ? 'bg-[#252528] border-[#3A3A3C] text-gray-200'
+                ? 'bg-[#18181A]/85 backdrop-blur-xl border-[#2C2C2E]'
                 : theme === 'sepia'
-                ? 'bg-[#E3D3B1] border-[#D6C197] text-[#5A452E]'
-                : 'bg-gray-100 border-gray-200 text-gray-800'
+                ? 'bg-[#F2E8D2]/90 backdrop-blur-xl border-[#DECFA9]'
+                : 'bg-white/90 backdrop-blur-xl border-gray-200/80 shadow-gray-200/40'
             }`}
           >
-            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
-              Hal {currentPage}/{totalPages}
-            </span>
-            <span className="text-[10px] opacity-70">
-              (Ayat {firstAyatOnPage}-{lastAyatOnPage})
-            </span>
-            <SlidersHorizontal className="w-3 h-3 opacity-60 ml-0.5" />
-          </button>
+            {/* Previous Page */}
+            <button
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+              aria-label="Halaman Sebelumnya"
+              className="w-8 h-8 rounded-full flex items-center justify-center transition-all active:scale-90 disabled:opacity-20 disabled:pointer-events-none hover:bg-black/5 dark:hover:bg-white/5"
+            >
+              <ChevronLeft className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            </button>
 
-          {/* Next Page Pill */}
-          <button
-            onClick={() => handlePageChange(currentPage + 1)}
-            disabled={currentPage === totalPages}
-            aria-label="Halaman Berikutnya"
-            className="w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 disabled:opacity-30 disabled:pointer-events-none hover:bg-black/5 dark:hover:bg-white/5"
-          >
-            <ChevronRight className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-          </button>
+            {/* Quick Page Picker Pill */}
+            <button
+              onClick={() => setIsJumpModalOpen(true)}
+              className="px-2.5 py-1 rounded-full text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center space-x-1 active:scale-95"
+            >
+              <span>Hal {currentPage} / {totalPages}</span>
+              <SlidersHorizontal className="w-2.5 h-2.5 opacity-60" />
+            </button>
 
-          {/* Quick Font Size Adjustment Button */}
-          <button
-            onClick={() => setShowFontModal(true)}
-            title="Ubah Ukuran Huruf"
-            className={`w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 ${themeClasses.cardElevated} hover:text-emerald-500`}
-          >
-            <Type className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          </button>
+            {/* Next Page */}
+            <button
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              aria-label="Halaman Berikutnya"
+              className="w-8 h-8 rounded-full flex items-center justify-center transition-all active:scale-90 disabled:opacity-20 disabled:pointer-events-none hover:bg-black/5 dark:hover:bg-white/5"
+            >
+              <ChevronRight className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Floating Back to Top Button */}
       {showScrollTop && (
         <button
-          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          onClick={() => {
+            window.scrollTo(0, 0);
+            document.documentElement.scrollTop = 0;
+            document.body.scrollTop = 0;
+          }}
           aria-label="Kembali ke atas"
-          className="fixed bottom-20 right-4 z-30 p-2.5 rounded-full bg-emerald-600 text-white shadow-lg active:scale-90 transition-all hover:bg-emerald-700"
+          className="fixed bottom-16 right-4 z-20 p-2.5 rounded-full bg-emerald-600 text-white shadow-lg active:scale-90 transition-all hover:bg-emerald-700"
         >
           <ArrowUp className="w-4 h-4" />
         </button>
       )}
 
       {/* iOS QUICK JUMP BOTTOM SHEET / MODAL */}
-      {showJumpModal && (
+      {isJumpModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-3 animate-fadeIn">
           <div
             className={`w-full max-w-sm rounded-3xl p-5 border shadow-2xl transition-all ${
@@ -705,7 +773,7 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
                 Lompat ke Ayat atau Halaman
               </h3>
               <button
-                onClick={() => setShowJumpModal(false)}
+                onClick={() => setIsJumpModalOpen(false)}
                 className="p-1 rounded-full text-gray-400 hover:text-gray-600"
               >
                 <X className="w-4 h-4" />
@@ -750,7 +818,7 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
                     key={pg}
                     onClick={() => {
                       handlePageChange(pg);
-                      setShowJumpModal(false);
+                      setIsJumpModalOpen(false);
                     }}
                     className={`py-1.5 rounded-lg text-xs font-bold transition-all ${
                       currentPage === pg
@@ -767,8 +835,8 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
         </div>
       )}
 
-      {/* QUICK FONT ADJUSTMENT MODAL */}
-      {showFontModal && (
+      {/* QUICK FONT ADJUSTMENT MODAL (aA) */}
+      {isFontModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-3 animate-fadeIn">
           <div
             className={`w-full max-w-sm rounded-3xl p-5 border shadow-2xl transition-all ${
@@ -780,11 +848,14 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
             }`}
           >
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
-              <h3 className={`text-sm font-bold ${themeClasses.textPrimary}`}>
-                Ukuran Huruf Arab ({arabicFontSize}px)
-              </h3>
+              <div className="flex items-center space-x-2">
+                <Type className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <h3 className={`text-sm font-bold ${themeClasses.textPrimary}`}>
+                  Ukuran Huruf Arab ({arabicFontSize}px)
+                </h3>
+              </div>
               <button
-                onClick={() => setShowFontModal(false)}
+                onClick={() => setIsFontModalOpen(false)}
                 className="p-1 rounded-full text-gray-400 hover:text-gray-600"
               >
                 <X className="w-4 h-4" />
@@ -825,7 +896,7 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
               </div>
 
               <button
-                onClick={() => setShowFontModal(false)}
+                onClick={() => setIsFontModalOpen(false)}
                 className="w-full py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold active:scale-95 transition-transform"
               >
                 Selesai

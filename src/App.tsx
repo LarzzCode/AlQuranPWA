@@ -5,6 +5,7 @@ import type { TabType } from './components/TabBar';
 import { SurahList } from './components/SurahList';
 import { SurahReader } from './components/SurahReader';
 import { RoutineView } from './components/RoutineView';
+import { RoutineBanner } from './components/RoutineBanner';
 import { NotificationsView } from './components/NotificationsView';
 import { SettingsView } from './components/SettingsView';
 import { fetchAllSurahs, fetchSurahDetail } from './services/quranApi';
@@ -29,6 +30,10 @@ export const App: React.FC = () => {
   const [activeSurahDetail, setActiveSurahDetail] = useState<SurahDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [readerAyatRange, setReaderAyatRange] = useState<{ start?: number; end?: number } | null>(null);
+
+  // Reader modals state triggered from header
+  const [showReaderFontModal, setShowReaderFontModal] = useState(false);
+  const [showReaderJumpModal, setShowReaderJumpModal] = useState(false);
 
   // Last read bookmark
   const [lastRead, setLastRead] = useState<Bookmark | null>(() => {
@@ -76,7 +81,9 @@ export const App: React.FC = () => {
     try {
       const detail = await fetchSurahDetail(surahNumber);
       setActiveSurahDetail(detail);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
     } catch (err: any) {
       alert('Gagal membuka surat. Silakan coba lagi.');
     } finally {
@@ -98,6 +105,8 @@ export const App: React.FC = () => {
   const handleBackToList = () => {
     setActiveSurahDetail(null);
     setReaderAyatRange(null);
+    setShowReaderFontModal(false);
+    setShowReaderJumpModal(false);
   };
 
   return (
@@ -112,10 +121,15 @@ export const App: React.FC = () => {
             : undefined
         }
         onBack={handleBackToList}
+        onOpenFontModal={() => setShowReaderFontModal(true)}
+        onOpenJumpModal={() => setShowReaderJumpModal(true)}
       />
 
       {/* Main Content Area */}
       <main className="max-w-2xl mx-auto px-4 py-3 pb-24">
+        {/* In-App Routine Notification Banner on Home */}
+        {!activeSurahDetail && <RoutineBanner onSelectRoutine={handleSelectRoutine} />}
+
         {loadingDetail && (
           <div className="py-24 text-center space-y-3">
             <div className="w-10 h-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
@@ -133,6 +147,10 @@ export const App: React.FC = () => {
             currentBookmark={lastRead}
             targetAyatStart={readerAyatRange?.start}
             targetAyatEnd={readerAyatRange?.end}
+            showFontModalExternal={showReaderFontModal}
+            setShowFontModalExternal={setShowReaderFontModal}
+            showJumpModalExternal={showReaderJumpModal}
+            setShowJumpModalExternal={setShowReaderJumpModal}
           />
         ) : (
           !loadingDetail && (
@@ -161,7 +179,7 @@ export const App: React.FC = () => {
         )}
       </main>
 
-      {/* Bottom iOS Tab Bar (visible when not reading or accessible throughout) */}
+      {/* Bottom iOS Floating Island Tab Bar (visible when not reading) */}
       {!activeSurahDetail && (
         <TabBar currentTab={currentTab} onTabChange={(tab) => setCurrentTab(tab)} />
       )}

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, BellRing, Sun, Moon, CheckCircle2, Sparkles, Smartphone } from 'lucide-react';
+import { Bell, BellRing, Sun, Moon, CheckCircle2, Sparkles, Smartphone, AlertTriangle } from 'lucide-react';
 import {
   getNotificationSettings,
   saveNotificationSettings,
   requestNotificationPermission,
   sendLocalNotification,
+  isIOS,
+  isStandalonePWA,
 } from '../services/notificationService';
 import type { NotificationSettings } from '../types/quran';
 import { useTheme } from '../context/ThemeContext';
@@ -19,11 +21,15 @@ export const NotificationsView: React.FC = () => {
     return 'Notification' in window ? Notification.permission : 'default';
   });
   const [testSent, setTestSent] = useState(false);
+  const [isAppleDevice, setIsAppleDevice] = useState(false);
+  const [isHomeApp, setIsHomeApp] = useState(false);
 
   useEffect(() => {
     if ('Notification' in window) {
       setPermissionState(Notification.permission);
     }
+    setIsAppleDevice(isIOS());
+    setIsHomeApp(isStandalonePWA());
   }, []);
 
   const handleToggleEnable = async () => {
@@ -54,10 +60,13 @@ export const NotificationsView: React.FC = () => {
     if (permissionState !== 'granted') {
       const granted = await requestNotificationPermission();
       if ('Notification' in window) setPermissionState(Notification.permission);
-      if (!granted) return;
+      if (!granted) {
+        alert('Izin notifikasi belum diizinkan oleh browser Anda.');
+        return;
+      }
     }
 
-    sendLocalNotification(
+    await sendLocalNotification(
       'Quran Pribadi - Uji Notifikasi Berhasil! 🔔',
       'Pengingat membaca Al-Waqiah (pagi) dan Al-Mulk / Akhir Baqarah (malam) siap menemani Anda.',
       '/'
@@ -67,7 +76,7 @@ export const NotificationsView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4 pb-20 animate-fadeIn">
+    <div className="space-y-4 pb-24 animate-fadeIn">
       {/* Header Info */}
       <div
         className={`p-5 rounded-3xl border transition-all ${
@@ -90,6 +99,26 @@ export const NotificationsView: React.FC = () => {
         </p>
       </div>
 
+      {/* iOS Standalone Warning Banner if in Safari Tab */}
+      {isAppleDevice && !isHomeApp && (
+        <div className="p-4 rounded-2xl border bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-200 space-y-2">
+          <div className="flex items-center space-x-2">
+            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+            <h4 className="text-xs font-bold uppercase tracking-wider">
+              Syarat Notifikasi iPhone (iOS)
+            </h4>
+          </div>
+          <p className="text-xs leading-relaxed opacity-90">
+            Di iPhone, Apple <strong>hanya mengaktifkan izin notifikasi</strong> jika web ini sudah ditambahkan ke <strong>Layar Utama (Home Screen)</strong>.
+          </p>
+          <div className="text-[11px] space-y-1 pt-1 opacity-95">
+            <p>1. Ketuk ikon <strong>Share</strong> di bar bawah Safari (ikon kotak berpanah ke atas).</p>
+            <p>2. Gulir ke bawah dan ketuk <strong>"Tambahkan ke Layar Utama" (Add to Home Screen)</strong>.</p>
+            <p>3. Buka aplikasi dari ikon di Layar Utama HP Anda, lalu tombol notifikasi di bawah akan langsung berfungsi normal!</p>
+          </div>
+        </div>
+      )}
+
       {/* Main Switch Card */}
       <div className={`p-4 rounded-2xl border ${themeClasses.cardBg}`}>
         <div className="flex items-center justify-between">
@@ -109,10 +138,10 @@ export const NotificationsView: React.FC = () => {
               </h3>
               <p className={`text-xs ${themeClasses.textSecondary}`}>
                 {permissionState === 'granted'
-                  ? 'Izin browser telah diberikan'
+                  ? 'Izin browser: Diberikan ✓'
                   : permissionState === 'denied'
-                  ? 'Izin browser ditolak (buka pengaturan browser)'
-                  : 'Klik untuk mengaktifkan izin notifikasi'}
+                  ? 'Izin browser: Ditolak (Buka Pengaturan HP ➔ Safari ➔ Notifikasi)'
+                  : 'Ketuk saklar untuk meminta izin notifikasi'}
               </p>
             </div>
           </div>
@@ -131,7 +160,7 @@ export const NotificationsView: React.FC = () => {
         {/* Test Notification Trigger */}
         <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between">
           <span className={`text-xs ${themeClasses.textSecondary}`}>
-            Ingin mencoba suara/tampilan notifikasi?
+            Ingin mencoba suara / getar notifikasi?
           </span>
           <button
             onClick={handleTestNotification}
@@ -228,23 +257,23 @@ export const NotificationsView: React.FC = () => {
         </div>
       </div>
 
-      {/* iOS Special Note */}
+      {/* In-App Reminder Guarantee Info */}
       <div
         className={`p-4 rounded-2xl border flex items-start space-x-3 ${
           theme === 'dark'
             ? 'bg-[#18181B] border-[#27272A]'
             : theme === 'sepia'
             ? 'bg-[#EFE5CC] border-[#DECFA9]'
-            : 'bg-blue-50/70 border-blue-200/70'
+            : 'bg-emerald-50/60 border-emerald-200/60'
         }`}
       >
-        <Smartphone className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+        <Smartphone className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
         <div className="text-xs leading-relaxed">
-          <p className="font-bold text-blue-600 dark:text-blue-400">
-            Khusus Pengguna iOS / iPhone / iPad:
+          <p className="font-bold text-emerald-700 dark:text-emerald-300">
+            Pengingat Visual Otomatis (In-App Banner):
           </p>
           <p className={`mt-0.5 ${themeClasses.textSecondary}`}>
-            Di sistem operasi iOS (Safari), notifikasi web memerlukan web app untuk ditambahkan ke Layar Utama (Home Screen) terlebih dahulu via tombol <strong>Share ➔ Tambahkan ke Layar Utama</strong>.
+            Selain notifikasi sistem, aplikasi kini dilengkapi spanduk pengingat visual otomatis di halaman depan saat Anda membuka web di waktu pagi atau malam jika belum membaca Al-Waqi'ah atau Al-Mulk hari ini.
           </p>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronLeft, Moon, Sun, BookOpen } from 'lucide-react';
+import { ChevronLeft, Moon, Sun, BookOpen, Type, ListFilter } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { getThemeClasses } from '../utils/themeClasses';
 import type { ThemeMode } from '../types/quran';
@@ -9,6 +9,8 @@ interface HeaderProps {
   subtitle?: string;
   onBack?: () => void;
   showBack?: boolean;
+  onOpenFontModal?: () => void;
+  onOpenJumpModal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -16,6 +18,8 @@ export const Header: React.FC<HeaderProps> = ({
   subtitle,
   onBack,
   showBack = false,
+  onOpenFontModal,
+  onOpenJumpModal,
 }) => {
   const { theme, setTheme } = useTheme();
   const themeClasses = getThemeClasses(theme);
@@ -30,8 +34,9 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className={`sticky top-0 z-40 transition-colors duration-200 border-b ${themeClasses.navBg} ${themeClasses.border}`}>
       <div className="max-w-2xl mx-auto px-4 pt-safe">
-        <div className="h-14 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
+        <div className="h-14 flex items-center justify-between gap-2">
+          {/* Left section: Back button or Logo */}
+          <div className="flex items-center space-x-2 shrink-0">
             {showBack ? (
               <button
                 onClick={onBack}
@@ -60,7 +65,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Center Title when in reader mode */}
           {showBack && (
-            <div className="flex-1 text-center px-2 truncate">
+            <div className="flex-1 text-center px-1 truncate">
               <h1 className={`text-sm font-semibold truncate ${themeClasses.textPrimary}`}>
                 {title}
               </h1>
@@ -72,8 +77,29 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
 
-          {/* Theme Quick Switcher Pill (iOS Segmented style) */}
-          <div className="flex items-center">
+          {/* Right Action Icons (Reader mode actions & Theme Toggle) */}
+          <div className="flex items-center space-x-1.5 shrink-0">
+            {showBack && onOpenJumpModal && (
+              <button
+                onClick={onOpenJumpModal}
+                title="Lompat ke Ayat atau Halaman"
+                className={`p-2 rounded-xl transition-all active:scale-90 ${themeClasses.cardElevated} ${themeClasses.textSecondary} hover:text-emerald-500`}
+              >
+                <ListFilter className="w-4 h-4" />
+              </button>
+            )}
+
+            {showBack && onOpenFontModal && (
+              <button
+                onClick={onOpenFontModal}
+                title="Pengaturan Ukuran Font (aA)"
+                className={`p-2 rounded-xl transition-all active:scale-90 ${themeClasses.cardElevated} ${themeClasses.textSecondary} hover:text-emerald-500`}
+              >
+                <Type className="w-4 h-4" />
+              </button>
+            )}
+
+            {/* Theme Quick Switcher Pill (iOS Segmented style) */}
             <button
               onClick={cycleTheme}
               title={`Ubah Mode (Saat ini: ${theme === 'light' ? 'Terang' : theme === 'sepia' ? 'Sepia' : 'Gelap'})`}
@@ -88,19 +114,19 @@ export const Header: React.FC<HeaderProps> = ({
               {theme === 'light' && (
                 <>
                   <Sun className="w-3.5 h-3.5 text-amber-500" />
-                  <span className="text-[11px]">Terang</span>
+                  <span className="text-[11px] hidden sm:inline">Terang</span>
                 </>
               )}
               {theme === 'sepia' && (
                 <>
-                  <span className="w-3.5 h-3.5 rounded-full bg-[#C29D5D] inline-block border border-[#A47F42]" />
-                  <span className="text-[11px]">Sepia</span>
+                  <span className="w-3 h-3 rounded-full bg-[#C29D5D] inline-block border border-[#A47F42]" />
+                  <span className="text-[11px] hidden sm:inline">Sepia</span>
                 </>
               )}
               {theme === 'dark' && (
                 <>
                   <Moon className="w-3.5 h-3.5 text-blue-300" />
-                  <span className="text-[11px]">Gelap</span>
+                  <span className="text-[11px] hidden sm:inline">Gelap</span>
                 </>
               )}
             </button>

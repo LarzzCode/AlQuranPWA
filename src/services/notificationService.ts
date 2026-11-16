@@ -10,6 +10,20 @@ export const defaultNotificationSettings: NotificationSettings = {
   nightActive: true,
 };
 
+export function isIOS(): boolean {
+  if (typeof window === 'undefined') return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+export function isStandalonePWA(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    (window.navigator as any).standalone === true
+  );
+}
+
 export function getNotificationSettings(): NotificationSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
@@ -32,7 +46,13 @@ export function saveNotificationSettings(settings: NotificationSettings) {
 
 export async function requestNotificationPermission(): Promise<boolean> {
   if (!('Notification' in window)) {
-    alert('Browser Anda belum mendukung Web Notification.');
+    if (isIOS() && !isStandalonePWA()) {
+      alert(
+        'Khusus iPhone / iPad: Apple mewajibkan web app ditambahkan ke Layar Utama (Add to Home Screen) terlebih dahulu agar notifikasi dapat diaktifkan.\n\nSilakan tekan tombol Share di Safari lalu pilih "Tambahkan ke Layar Utama".'
+      );
+    } else {
+      alert('Browser Anda belum mendukung Web Notification.');
+    }
     return false;
   }
 
@@ -41,14 +61,19 @@ export async function requestNotificationPermission(): Promise<boolean> {
   }
 
   if (Notification.permission !== 'denied') {
-    const permission = await Notification.requestPermission();
-    return permission === 'granted';
+    try {
+      const permission = await Notification.requestPermission();
+      return permission === 'granted';
+    } catch (e) {
+      console.warn('Error requesting notification permission', e);
+      return false;
+    }
   }
 
   return false;
 }
 
-export function sendLocalNotification(title: string, body: string, urlPath: string = '/') {
+export async function sendLocalNotification(title: string, body: string, urlPath: string = '/') {
   if (!('Notification' in window) || Notification.permission !== 'granted') {
     return;
   }
@@ -60,12 +85,25 @@ export function sendLocalNotification(title: string, body: string, urlPath: stri
     data: { url: urlPath },
   };
 
-  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-    navigator.serviceWorker.ready.then((registration) => {
-      registration.showNotification(title, options);
-    });
-  } else {
+  // Crucial for iOS: new Notification() throws an error in iOS Safari!
+  // It MUST be delivered through the Service Worker registration.
+  if ('serviceWorker' in navigator) {
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      if (registration && registration.showNotification) {
+        await registration.showNotification(title, options);
+        return;
+      }
+    } catch (swErr) {
+      console.warn('ServiceWorker showNotification failed, trying fallback', swErr);
+    }
+  }
+
+  // Fallback for desktop / standard browsers
+  try {
     new Notification(title, options);
+  } catch (err) {
+    console.warn('Desktop Notification fallback failed', err);
   }
 }
 
@@ -76,10 +114,10 @@ let lastTriggeredDate = '';
 export function startNotificationScheduler() {
   if (timerId) clearInterval(timerId);
 
-  // Check every 30 seconds
+  // Check every 25 seconds
   timerId = window.setInterval(() => {
     const settings = getNotificationSettings();
-    if (!settings.enabled || Notification.permission !== 'granted') {
+    if (!settings.enabled || !('Notification' in window) || Notification.permission !== 'granted') {
       return;
     }
 
@@ -96,7 +134,7 @@ export function startNotificationScheduler() {
         lastTriggeredDate = triggerKey;
         sendLocalNotification(
           "Waktunya Membaca Al-Waqi'ah 🌅",
-          "Awali pagi Anda dengan keberkahan surat Al-Waqiah untuk membuka pintu rezeki.",
+          "Awali pagi Anda dengan keberkahan surat Al-Waqiah pembuka pintu rezeki.",
           '/?routine=waqiah'
         );
       }
@@ -109,10 +147,10 @@ export function startNotificationScheduler() {
         lastTriggeredDate = triggerKey;
         sendLocalNotification(
           "Rutinitas Malam: Al-Mulk & Akhir Al-Baqarah 🌙",
-          "Tenangkan hati sebelum tidur dengan Al-Mulk (penyelamat kubur) & 3 ayat terakhir Al-Baqarah.",
+          "Tenangkan hati sebelum tidur dengan Al-Mulk & 3 ayat terakhir Al-Baqarah.",
           '/?routine=mulk'
         );
       }
     }
-  }, 30000);
+  }, 25000);
 }
