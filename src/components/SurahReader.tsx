@@ -78,9 +78,10 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
     else setInternalFontModal(open);
   };
 
-  // Pagination states
+  // Pagination states & Page-Turn Animation Direction
   const [pageSize, setPageSize] = useState<number>(10);
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageTurnDirection, setPageTurnDirection] = useState<'next' | 'prev' | 'fade'>('fade');
   const [jumpAyatInput, setJumpAyatInput] = useState<string>('');
 
   // Floating bar visibility on scroll: auto-hide when scrolling down to give 100% full immersion
@@ -115,9 +116,26 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
     return baseAyat.slice(startIdx, startIdx + pageSize);
   }, [baseAyat, currentPage, pageSize]);
 
-  // Handle page change: ALWAYS reset scroll to the very top cleanly on iPhone & all devices
+  // Handle page change: ALWAYS reset scroll to the very top cleanly on iPhone & all devices with direction
   const handlePageChange = (newPage: number) => {
     if (newPage < 1 || newPage > totalPages) return;
+    
+    // Set animation direction
+    if (newPage > currentPage) {
+      setPageTurnDirection('next');
+    } else if (newPage < currentPage) {
+      setPageTurnDirection('prev');
+    } else {
+      setPageTurnDirection('fade');
+    }
+
+    // Optional haptic tap on mobile
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate(10);
+      } catch {}
+    }
+
     setCurrentPage(newPage);
   };
 
@@ -157,6 +175,7 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
   // Reset page when surah changes
   useEffect(() => {
     setCurrentPage(1);
+    setPageTurnDirection('fade');
     setActiveRange(targetAyatStart ? { start: targetAyatStart, end: targetAyatEnd } : null);
   }, [surah.nomor, targetAyatStart, targetAyatEnd]);
 
@@ -166,7 +185,7 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
       const currentY = window.scrollY;
       setShowScrollTop(currentY > 350);
 
-      // If scrolled down more than 15px, hide floating nav for distraction-free reading
+      // If scrolled down more than 12px, hide floating nav for distraction-free reading
       if (currentY > lastScrollY.current + 12 && currentY > 150) {
         setIsFloatingBarVisible(false);
       } else if (currentY < lastScrollY.current - 8 || currentY <= 150) {
@@ -204,6 +223,7 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
     }
 
     const targetPage = Math.ceil(ayatNum / pageSize);
+    setPageTurnDirection('fade');
     setCurrentPage(targetPage);
     setIsJumpModalOpen(false);
     setJumpAyatInput('');
@@ -245,6 +265,7 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
       const nextAyat = surah.ayat.find((a) => a.nomorAyat === nextAyatNumber);
       if (nextAyat) {
         if (nextAyatNumber > currentPage * pageSize && currentPage < totalPages) {
+          setPageTurnDirection('next');
           setCurrentPage((prev) => prev + 1);
         }
         handlePlayAyat(nextAyat);
@@ -302,10 +323,18 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
   const firstAyatOnPage = paginatedAyat[0]?.nomorAyat || 1;
   const lastAyatOnPage = paginatedAyat[paginatedAyat.length - 1]?.nomorAyat || 1;
 
+  // Determine CSS class for page turn animation
+  const pageAnimClass =
+    pageTurnDirection === 'next'
+      ? 'anim-page-next'
+      : pageTurnDirection === 'prev'
+      ? 'anim-page-prev'
+      : 'anim-page-fade';
+
   return (
     <div className="space-y-4 pb-24 animate-fadeIn relative">
       {/* Top Sentinel for instant scroll to top */}
-      <div ref={topSentinelRef} className="h-0 w-0 -mt-2" />
+      <div ref={topSentinelRef} className="h-0 w-0 -mt-3" />
 
       {/* Surah Header Card (iOS Cupertino Style) */}
       <div
@@ -395,9 +424,11 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
                 if (activeRange?.start === 284) {
                   setActiveRange(null);
                   setCurrentPage(1);
+                  setPageTurnDirection('fade');
                 } else {
                   setActiveRange({ start: 284, end: 286 });
                   setCurrentPage(1);
+                  setPageTurnDirection('fade');
                 }
               }}
               className={`text-xs px-3 py-1.5 rounded-xl font-medium transition-all border ${
@@ -416,6 +447,7 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
                 onClick={() => {
                   setActiveRange(null);
                   setCurrentPage(1);
+                  setPageTurnDirection('fade');
                 }}
                 className={`text-xs px-3 py-1.5 rounded-xl border ${themeClasses.cardElevated} ${themeClasses.textSecondary}`}
               >
@@ -455,6 +487,7 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
               onClick={() => {
                 setPageSize(size);
                 setCurrentPage(1);
+                setPageTurnDirection('fade');
               }}
               className={`px-2 py-0.5 rounded-lg text-[11px] font-medium transition-all ${
                 pageSize === size
@@ -469,6 +502,7 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
             onClick={() => {
               setPageSize(surah.jumlahAyat);
               setCurrentPage(1);
+              setPageTurnDirection('fade');
             }}
             className={`px-2 py-0.5 rounded-lg text-[11px] font-medium transition-all ${
               pageSize >= surah.jumlahAyat
@@ -493,8 +527,8 @@ export const SurahReader: React.FC<SurahReaderProps> = ({
         </div>
       )}
 
-      {/* Verses List */}
-      <div className="space-y-3.5">
+      {/* ANIMATED VERSES CONTAINER: Glides in smoothly with physical page turn animation */}
+      <div key={`page-${currentPage}`} className={`space-y-3.5 ${pageAnimClass}`}>
         {paginatedAyat.map((ayat) => {
           const isBookmarked =
             currentBookmark?.surahNumber === surah.nomor &&

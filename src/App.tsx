@@ -126,7 +126,7 @@ export const App: React.FC = () => {
       />
 
       {/* Main Content Area */}
-      <main className="max-w-2xl mx-auto px-4 py-3 pb-24">
+      <main className="max-w-2xl mx-auto px-3.5 sm:px-4 pt-1 pb-24">
         {/* In-App Routine Notification Banner on Home */}
         {!activeSurahDetail && <RoutineBanner onSelectRoutine={handleSelectRoutine} />}
 
